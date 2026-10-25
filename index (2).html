@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Sabores del Puerto · Prototipo de reservas</title>
+<style>
+:root{--bg:#f1f5f6;--fg:#12292f;--card:#fff;--bd:#cbd8db;--ac:#0f4c5c;--hl:#e36414;--ok:#1d7a46;--er:#b3261e;--mu:#56696e}
+@media(prefers-color-scheme:dark){:root{--bg:#0e1c20;--fg:#e6eff1;--card:#15282d;--bd:#2c4349;--ac:#5fc1d6;--hl:#ff9248;--ok:#6fd49a;--er:#ff8f86;--mu:#9bb2b8}}
+*{box-sizing:border-box}body{margin:0;font:15px/1.5 system-ui,sans-serif;background:var(--bg);color:var(--fg)}
+header{padding:16px 20px;border-bottom:3px solid var(--ac);display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+h1{font:700 24px Georgia,serif;margin:0}h2{font:600 18px Georgia,serif;margin:0 0 12px}.mu{color:var(--mu);font-size:13px}
+main{max-width:980px;margin:auto;padding:18px}.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:16px;margin-bottom:14px}
+label{display:block;font-size:13px;color:var(--mu)}input,select{font:inherit;padding:7px;width:100%;border:1px solid var(--bd);border-radius:6px;background:var(--bg);color:var(--fg)}
+button{font:inherit;padding:7px 12px;margin:2px;border:1px solid var(--ac);background:var(--card);color:var(--ac);border-radius:6px;cursor:pointer}
+button.p{background:var(--ac);color:var(--bg)}button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--hl);outline-offset:1px}
+.g{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}.w{overflow-x:auto}
+table{border-collapse:collapse;width:100%}td,th{border:1px solid var(--bd);padding:5px 7px;text-align:center;font-size:13px}
+.free{color:var(--ok)}.busy{background:var(--hl);color:#111;font-weight:600}
+.msg{padding:9px 12px;border-radius:6px;margin-top:10px;border:1px solid}.msg.ok{color:var(--ok)}.msg.er{color:var(--er)}
+.t{padding:1px 8px;border-radius:99px;border:1px solid var(--bd);font-size:12px}.bar{height:14px;background:var(--ac);border-radius:3px;min-width:2px}
+</style></head><body>
+<header><div><h1>Sabores del Puerto</h1><div class="mu">Prototipo funcional de reservas · caso hipotético académico</div></div>
+<nav><button onclick="ver('reservar')">Reservar</button><button onclick="ver('mi')">Mi reserva</button><button onclick="ver('panel')">Personal</button></nav></header>
+<main><section id="v-reservar"></section>
+<section id="v-mi" class="card" hidden><h2>Consultar, modificar o cancelar</h2><div class="g"><label>Código<input id="mc" placeholder="SP-XXXXX"></label><label>Correo<input id="me" type="email"></label></div><p><button class="p" onclick="buscarMi()">Buscar reserva</button></p><div id="mb"></div></section>
+<section id="v-panel" hidden></section>
+</main>
+<script>
+const MESAS=[2,2,2,2,4,4,4,4,6,8],HORAS=[12,13,14,15,16,17,18,19,20],DUR=2,MAXP=8,DIAS=30,K='sdp-v1',ACT=['Confirmada','Asistió'];
+const USERS={propietario:{pin:'owner2026',p:['ver','crear','estado','cancelar','indicadores','correos','pruebas']},mesero:{pin:'mesa2026',p:['ver','crear','estado','cancelar']}};
+const $=s=>document.querySelector(s),esc=s=>String(s).replace(/[&<>"']/g,c=>'&#'+c.charCodeAt(0)+';');
+const suma=n=>{const d=new Date();d.setDate(d.getDate()+n);return new Date(d-d.getTimezoneOffset()*6e4).toISOString().slice(0,10)},hoy=()=>suma(0);
+let S,rol=null,dry=false,tab='mesas',pf=suma(1);
+function load(){try{S=JSON.parse(localStorage.getItem(K))}catch(e){S=null}if(!S)seed()}
+function save(){if(!dry){try{localStorage.setItem(K,JSON.stringify(S))}catch(e){}}}
+function seed(){S={res:[],mail:[],fail:false,seq:1};[[1,12,2,'Ana Gómez'],[1,13,4,'Luis Pérez'],[1,19,6,'Marta Ruiz'],[2,20,2,'Carlos Díaz'],[2,14,8,'Familia Soto']].forEach(([d,h,p,n])=>crear({fecha:suma(d),hora:h,personas:p,nombre:n,email:n.split(' ')[0].toLowerCase()+'@ejemplo.com'},'teléfono'));save()}
+/* ---- Lógica de negocio ---- */
+function libres(f,h,p,ig){const o=S.res.filter(r=>r.fecha===f&&r.id!==ig&&ACT.includes(r.estado)&&Math.abs(r.hora-h)<DUR).map(r=>r.mesa);return MESAS.map((c,i)=>({n:i+1,c})).filter(m=>m.c>=p&&!o.includes(m.n)).sort((a,b)=>a.c-b.c)}
+function valida(d){const h=+d.hora,p=+d.personas;
+ if(!/^\d{4}-\d\d-\d\d$/.test(d.fecha||''))return'Fecha inválida.';
+ if(d.fecha<hoy()||d.fecha>suma(DIAS))return`Solo se reserva desde hoy hasta ${DIAS} días adelante.`;
+ if(!HORAS.includes(h))return'Horario fuera de servicio (12:00–22:00).';
+ if(d.fecha===hoy()&&h<=new Date().getHours())return'Esa hora ya pasó.';
+ if(!(p>=1&&p<=MAXP))return`Grupos de 1 a ${MAXP} personas. Para más, llame al restaurante.`;
+ if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(d.email||''))return'Correo inválido.';
+ if(!(d.nombre||'').trim())return'Falta el nombre.';return''}
+function correo(r,a){S.mail.push({id:S.mail.length+1,cod:r.cod,para:r.email,asunto:a+' '+r.cod,cuerpo:`${r.nombre}: ${r.fecha} ${r.hora}:00, ${r.personas} pers., mesa ${r.mesa}.`,estado:S.fail?'Fallido':'Enviado',intentos:1})}
+function reintentar(id){const m=S.mail.find(x=>x.id===id);if(m&&m.estado==='Fallido'){m.intentos++;m.estado=S.fail?'Fallido':'Enviado';save()}}
+/* verificar disponibilidad y escribir ocurren en un solo bloque síncrono: equivale a la transacción del diseño */
+function crear(d,origen='web'){const e=valida(d);if(e)return{ok:0,msg:e};const m=libres(d.fecha,+d.hora,+d.personas)[0];
+ if(!m)return{ok:0,msg:'No hay mesas libres en ese horario. Pruebe otra hora.'};
+ const r={id:S.seq++,cod:'SP-'+Math.random().toString(36).slice(2,7).toUpperCase(),fecha:d.fecha,hora:+d.hora,personas:+d.personas,nombre:d.nombre.trim(),tel:d.tel||'',email:d.email.trim().toLowerCase(),mesa:m.n,estado:'Confirmada',origen};
+ S.res.push(r);correo(r,'Reserva confirmada');save();return{ok:1,r}}
+const buscar=(c,e)=>S.res.find(r=>r.cod===String(c).trim().toUpperCase()&&r.email===String(e).trim().toLowerCase());
+function modificar(c,e,d){const r=buscar(c,e);if(!r)return{ok:0,msg:'Código o correo incorrectos.'};if(r.estado!=='Confirmada')return{ok:0,msg:'Solo se modifican reservas confirmadas.'};
+ const n={...r,...d},er=valida(n);if(er)return{ok:0,msg:er};const l=libres(n.fecha,+n.hora,+n.personas,r.id);
+ if(!l.length)return{ok:0,msg:'Sin disponibilidad en el nuevo horario. Su reserva original se mantiene.'};
+ Object.assign(r,{fecha:n.fecha,hora:+n.hora,personas:+n.personas,mesa:l.some(m=>m.n===r.mesa)?r.mesa:l[0].n});correo(r,'Reserva modificada');save();return{ok:1,r}}
+function cancelar(c,e){const r=buscar(c,e);if(!r)return{ok:0,msg:'Código o correo incorrectos.'};if(r.estado!=='Confirmada')return{ok:0,msg:'La reserva no está activa.'};r.estado='Cancelada';correo(r,'Reserva cancelada');save();return{ok:1}}
+const can=(u,a)=>!!USERS[u]&&USERS[u].p.includes(a);
+function marcar(id,e,u){if(!can(u,e==='Cancelada'?'cancelar':'estado'))return{ok:0,msg:'Sin permiso.'};const r=S.res.find(x=>x.id===id);if(!r)return{ok:0,msg:'No existe.'};r.estado=e;if(e==='Cancelada')correo(r,'Reserva cancelada');save();return{ok:1}}
+/* ---- Pruebas automáticas (no modifican los datos guardados) ---- */
+async function pruebas(){const bak=S,out=[],t=(n,c)=>out.push([n,!!c]);dry=true;
+ try{const f=suma(3),base=()=>S={res:[],mail:[],fail:false,seq:1},D=o=>({fecha:f,hora:13,personas:2,nombre:'Test',email:'t@t.co',...o});let a,b;
+ base();a=crear(D({personas:8}));b=crear(D({personas:8}));t('P1. Impide la doble reserva de la misma mesa y hora',a.ok&&!b.ok);
+ base();a=crear(D({personas:8}));cancelar(a.r.cod,'t@t.co');b=crear(D({personas:8}));t('P2. La disponibilidad se actualiza tras cancelar',b.ok&&b.r.mesa===a.r.mesa);
+ base();a=crear(D());t('P3. Cancelar con un correo ajeno es rechazado',!cancelar(a.r.cod,'otro@x.co').ok&&buscar(a.r.cod,'t@t.co').estado==='Confirmada');
+ t('P4. Control de acceso: el mesero no ve indicadores; un anónimo no cambia estados',!can('mesero','indicadores')&&can('propietario','indicadores')&&!marcar(1,'Cancelada','anon').ok);
+ base();const rs=await Promise.all(Array.from({length:50},(_,i)=>Promise.resolve().then(()=>crear(D({nombre:'C'+i}))))),ok=rs.filter(x=>x.ok);
+ t(`P5. 50 solicitudes simultáneas al mismo horario: ${ok.length} aceptadas, ${50-ok.length} rechazadas, sin mesas repetidas`,ok.length===MESAS.length&&new Set(ok.map(x=>x.r.mesa)).size===ok.length);
+ base();S.fail=true;crear(D());S.fail=false;reintentar(S.mail[0].id);t('P6. Un correo fallido se reintenta y queda enviado',S.mail[0].estado==='Enviado'&&S.mail[0].intentos===2)}
+ finally{S=bak;dry=false}return out}
+/* ---- Interfaz ---- */
+const campos=p=>`<div class="g"><label>Fecha<input type="date" id="${p}f" value="${suma(1)}" min="${hoy()}" max="${suma(DIAS)}" onchange="hint('${p}')"></label><label>Hora<select id="${p}h" onchange="hint('${p}')">${HORAS.map(h=>`<option value="${h}">${h}:00</option>`).join('')}</select></label><label>Personas<input type="number" id="${p}p" min="1" max="${MAXP}" value="2" onchange="hint('${p}')"></label><label>Nombre<input id="${p}n"></label><label>Teléfono<input id="${p}t"></label><label>Correo<input id="${p}e" type="email"></label></div><p id="${p}i" class="mu"></p>`;
+const dato=p=>({fecha:$('#'+p+'f').value,hora:$('#'+p+'h').value,personas:$('#'+p+'p').value,nombre:$('#'+p+'n').value,tel:$('#'+p+'t').value,email:$('#'+p+'e').value});
+function hint(p){if(!$('#'+p+'i'))return;const d=dato(p),l=libres(d.fecha,+d.hora,+d.personas);$('#'+p+'i').textContent=l.length?`${l.length} mesa(s) disponible(s) para ese horario.`:'Sin mesas libres para ese horario.'}
+const show=(s,x,m)=>$(s).innerHTML=`<div class="msg ${x.ok?'ok':'er'}">${x.ok?m:esc(x.msg)}</div>`;
+function reservar(){const x=crear(dato('r'));show('#rm',x,x.ok?`Reserva confirmada. Código: <b>${x.r.cod}</b> · mesa ${x.r.mesa} · ${x.r.fecha} a las ${x.r.hora}:00. Guarde el código: lo necesita para modificar o cancelar.`:'');hint('r')}
+function ver(v){['reservar','mi','panel'].forEach(s=>$('#v-'+s).hidden=s!==v);if(v==='panel')panel()}
+function buscarMi(){const r=buscar($('#mc').value,$('#me').value);$('#mb').innerHTML=r?`<p><b>${r.cod}</b> · ${esc(r.nombre)} · mesa ${r.mesa} · <span class="t">${r.estado}</span></p>`+(r.estado==='Confirmada'?`<div class="g"><label>Fecha<input type="date" id="mf" value="${r.fecha}"></label><label>Hora<select id="mh">${HORAS.map(h=>`<option value="${h}" ${h===r.hora?'selected':''}>${h}:00</option>`).join('')}</select></label><label>Personas<input type="number" id="mp" min="1" max="${MAXP}" value="${r.personas}"></label></div><p><button class="p" onclick="guardarMi()">Guardar cambios</button><button onclick="cancelaMi()">Cancelar reserva</button></p><div id="mm"></div>`:''):'<div class="msg er">Código o correo incorrectos.</div>'}
+const guardarMi=()=>show('#mm',modificar($('#mc').value,$('#me').value,{fecha:$('#mf').value,hora:$('#mh').value,personas:$('#mp').value}),'Reserva modificada. Se reenvió la confirmación por correo.');
+function cancelaMi(){if(confirm('¿Cancelar esta reserva?'))show('#mm',cancelar($('#mc').value,$('#me').value),'Reserva cancelada.')}
+function entrar(){const u=$('#lu').value;if(USERS[u].pin===$('#lp').value){rol=u;tab='mesas';panel()}else show('#lm',{ok:0,msg:'PIN incorrecto.'})}
+function panel(){const el=$('#v-panel');if(!rol){el.innerHTML=`<div class="card"><h2>Acceso del personal</h2><div class="g"><label>Usuario<select id="lu"><option>propietario</option><option>mesero</option></select></label><label>PIN<input id="lp" type="password"></label></div><p class="mu">PIN de demostración: propietario → owner2026 · mesero → mesa2026</p><button class="p" onclick="entrar()">Ingresar</button><div id="lm"></div></div>`;return}
+ const T=[['mesas','Disponibilidad'],['res','Reservas del día'],['nueva','Nueva reserva (teléfono/presencial)'],['ind','Indicadores','indicadores'],['mail','Correos','correos'],['test','Pruebas','pruebas']].filter(t=>can(rol,t[2]||'ver'));
+ el.innerHTML=`<div class="card"><b>Sesión: ${rol}</b> <button onclick="rol=null;panel()">Salir</button><label style="max-width:200px">Fecha<input type="date" id="pf" value="${pf}" onchange="pf=this.value;panel()"></label></div><div>${T.map(t=>`<button class="${t[0]===tab?'p':''}" onclick="tab='${t[0]}';panel()">${t[1]}</button>`).join('')}</div><div class="card" id="pc" style="margin-top:10px"></div>`;
+ ({mesas:tMesas,res:tRes,nueva:tNueva,ind:tInd,mail:tMail,test:tTest})[tab]()}
+function tMesas(){const rs=S.res.filter(r=>r.fecha===pf&&ACT.includes(r.estado));$('#pc').innerHTML=`<h2>Disponibilidad del ${pf}</h2><p class="mu">Cada celda indica si se puede iniciar una reserva (dura 2 h). Se actualiza en tiempo real, incluso entre pestañas.</p><div class="w"><table><tr><th>Mesa (cap.)</th>${HORAS.map(h=>`<th>${h}:00</th>`).join('')}</tr>${MESAS.map((c,i)=>`<tr><th>${i+1} (${c})</th>${HORAS.map(h=>{const r=rs.find(x=>x.mesa===i+1&&Math.abs(x.hora-h)<DUR);return r?`<td class="busy">${esc(r.nombre.split(' ')[0])}</td>`:'<td class="free">libre</td>'}).join('')}</tr>`).join('')}</table></div>`}
+function tRes(){const rs=S.res.filter(r=>r.fecha===pf).sort((a,b)=>a.hora-b.hora);$('#pc').innerHTML=`<h2>Reservas del ${pf}</h2><div class="w"><table><tr><th>Hora</th><th>Código</th><th>Cliente</th><th>Pers.</th><th>Mesa</th><th>Origen</th><th>Estado</th><th>Acciones</th></tr>${rs.map(r=>`<tr><td>${r.hora}:00</td><td>${r.cod}</td><td>${esc(r.nombre)}</td><td>${r.personas}</td><td>${r.mesa}</td><td>${r.origen}</td><td>${r.estado}</td><td>${r.estado==='Confirmada'?['Asistió','No-show','Cancelada'].map(e=>`<button onclick="act(${r.id},'${e}')">${e}</button>`).join(''):''}</td></tr>`).join('')||'<tr><td colspan="8">Sin reservas para esta fecha.</td></tr>'}</table></div>`}
+function act(id,e){const x=marcar(id,e,rol);if(!x.ok)alert(x.msg);panel()}
+function tNueva(){$('#pc').innerHTML=`<h2>Registrar reserva recibida por teléfono o en persona</h2>${campos('n')}<label style="max-width:200px">Origen<select id="no"><option>teléfono</option><option>presencial</option></select></label><p><button class="p" onclick="nueva()">Registrar reserva</button></p><div id="nm"></div>`;hint('n')}
+function nueva(){if(!can(rol,'crear'))return;const x=crear(dato('n'),$('#no').value);show('#nm',x,x.ok?`Registrada. Código <b>${x.r.cod}</b> · mesa ${x.r.mesa}.`:'');hint('n')}
+function tInd(){const rs=S.res.filter(r=>r.fecha===pf&&ACT.includes(r.estado)),oc=Math.round(rs.length*DUR/(MESAS.length*10)*100),ns=S.res.filter(r=>r.estado==='No-show').length,as=S.res.filter(r=>r.estado==='Asistió').length,mx=Math.max(1,...HORAS.map(h=>rs.filter(r=>r.hora===h).length));
+ $('#pc').innerHTML=`<h2>Indicadores</h2><p><b>Ocupación del ${pf}:</b> ${oc}% (mesa-horas reservadas / disponibles)</p><p><b>Tasa de inasistencia (global):</b> ${as+ns?Math.round(ns/(as+ns)*100)+'% ('+ns+' de '+(as+ns)+')':'sin datos aún'}</p><p><b>Reservas por hora de inicio</b> (apoya la planeación de turnos)</p>${HORAS.map(h=>{const c=rs.filter(r=>r.hora===h).length;return`<div style="display:flex;gap:8px;align-items:center"><span style="width:50px">${h}:00</span><div class="bar" style="width:${c/mx*60}%"></div> ${c}</div>`}).join('')}`}
+function tMail(){$('#pc').innerHTML=`<h2>Bandeja de salida (correos simulados)</h2><label><input type="checkbox" style="width:auto" ${S.fail?'checked':''} onchange="S.fail=this.checked;save()"> Simular caída del servicio de correo</label><div class="w"><table><tr><th>Para</th><th>Asunto</th><th>Estado</th><th>Intentos</th><th></th></tr>${S.mail.slice().reverse().map(m=>`<tr><td>${esc(m.para)}</td><td>${esc(m.asunto)}</td><td>${m.estado}</td><td>${m.intentos}</td><td>${m.estado==='Fallido'?`<button onclick="reintentar(${m.id});tMail()">Reintentar</button>`:''}</td></tr>`).join('')}</table></div>`}
+function tTest(){$('#pc').innerHTML=`<h2>Pruebas de aceptación automáticas</h2><button class="p" onclick="corre()">Ejecutar pruebas</button><button onclick="if(confirm('¿Restablecer datos de ejemplo?')){seed();panel()}">Restablecer datos de ejemplo</button><div id="tr"></div>`}
+async function corre(){const o=await pruebas();$('#tr').innerHTML=o.map(([n,k])=>`<p class="${k?'free':'msg er'}">${k?'✔ Pasó':'✘ Falló'} · ${n}</p>`).join('')}
+load();$('#v-reservar').innerHTML=`<div class="card"><h2>Reservar mesa</h2>${campos('r')}<button class="p" onclick="reservar()">Confirmar reserva</button><div id="rm"></div></div>`;hint('r');
+addEventListener('storage',e=>{if(e.key===K){load();if(rol)panel();hint('r')}});
+</script></body></html>
