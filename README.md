@@ -3,7 +3,7 @@
 Este es el prototipo funcional de la Actividad 4. Es la continuación del proyecto que formulé en la Actividad 2: un sistema web para que el restaurante Sabores del Puerto (un caso hipotético, sin datos reales) maneje sus reservas sin depender de llamadas ni de WhatsApp.
 
 - **Demo:** https://juandatr200731-afk.github.io/sabores-del-puerto/
-- **Repositorio:** https://github.com/TU-USUARIO/sabores-del-puerto
+- **Repositorio:** https://github.com/juandatr200731-afk/sabores-del-puerto/tree/main
 
 ## Cómo correrlo
 
